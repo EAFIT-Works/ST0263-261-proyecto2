@@ -22,7 +22,7 @@ def upload(df, name):
     df.to_csv(local_file, index=False)
     s3.upload_file(local_file, BUCKET, s3_key)
 
-    print(f"[EC2 INGEST] Uploaded: {s3_key}")
+    print(f"[EC2 INGEST] Uploaded: s3://{BUCKET}/{s3_key}")
 
 
 def ingest_ec2_files():
@@ -39,8 +39,3 @@ def ingest_ec2_files():
             upload(df, name)
         else:
             print(f"[WARN] Missing file: {path}")
-
-
-print("=== EC2 INGEST START ===")
-ingest_ec2_files()
-print("=== EC2 INGEST END ===")

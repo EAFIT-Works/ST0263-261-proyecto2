@@ -3,46 +3,32 @@ import boto3
 import pandas as pd
 import datetime
 
-# =========================
-# CONFIG
-# =========================
-
 BUCKET = "movie-analytics-lake"
 API_URL = "https://api.exchangerate-api.com/v4/latest/USD"
 
 s3 = boto3.client("s3")
 
 
-# =========================
-# UTIL
-# =========================
-
 def ts():
     return datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
 
 
 def fetch_api():
-    """Call Exchange Rate API"""
     response = requests.get(API_URL)
-    data = response.json()
-    return data
+    return response.json()
 
 
 def transform(data):
-    """Flatten API response"""
     rates = data["rates"]
-    base = data["base"]
-    date = data["date"]
 
     df = pd.DataFrame(list(rates.items()), columns=["currency", "rate"])
-    df["base"] = base
-    df["date"] = date
+    df["base"] = data["base"]
+    df["date"] = data["date"]
 
     return df
 
 
 def upload_to_s3(df):
-    """Upload snapshot to S3"""
     timestamp = ts()
 
     local_file = f"/tmp/exchange_{timestamp}.csv"
@@ -54,14 +40,11 @@ def upload_to_s3(df):
     print(f"[API INGEST] Uploaded: s3://{BUCKET}/{s3_key}")
 
 
-# =========================
-# PIPELINE
-# =========================
+def ingest_api():
+    print("=== API INGEST START ===")
 
-print("=== API INGEST START ===")
+    data = fetch_api()
+    df = transform(data)
+    upload_to_s3(df)
 
-data = fetch_api()
-df = transform(data)
-upload_to_s3(df)
-
-print("=== API INGEST END ===")
+    print("=== API INGEST END ===")
