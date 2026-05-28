@@ -1,7 +1,8 @@
 import csv
 import datetime
 import gc
-import os
+import io
+from typing import Iterator
 
 import pymysql
 
@@ -13,7 +14,7 @@ from config import (
     DB_PORT,
     DB_USER,
 )
-from s3_util import upload_path
+from s3_util import upload_stream
 
 
 def ts():
@@ -34,50 +35,58 @@ def _connect():
     )
 
 
+def _csv_byte_chunks(cursor, fetch_size: int) -> Iterator[bytes]:
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+
+    columns = [col[0] for col in cursor.description]
+    writer.writerow(columns)
+    yield buf.getvalue().encode("utf-8")
+    buf.seek(0)
+    buf.truncate(0)
+
+    batches = 0
+    while True:
+        rows = cursor.fetchmany(fetch_size)
+        if not rows:
+            break
+        writer.writerows(rows)
+        yield buf.getvalue().encode("utf-8")
+        buf.seek(0)
+        buf.truncate(0)
+        batches += 1
+        if batches % 20 == 0:
+            gc.collect()
+
+    if batches == 0:
+        return
+    # batches > 0 means we had data rows (header always yielded)
+
+
 def ingest_table(query: str, name: str, fetch_size: int = DB_FETCH_SIZE) -> None:
     """
-    Exporta la query a CSV en /tmp por trozos y sube a S3.
-    SSCursor evita cargar toda la tabla en RAM (OOM en t3.micro).
+    MariaDB -> CSV -> S3 en streaming (sin /tmp, poco RAM).
     """
     timestamp = ts()
-    local_file = f"/tmp/{name}_{timestamp}.csv"
     s3_key = f"raw/{name}/{name}_{timestamp}.csv"
 
     conn = _connect()
-    wrote = False
-    batches = 0
-
     try:
         with conn.cursor() as cursor:
             cursor.execute(query)
-            columns = [col[0] for col in cursor.description]
+            chunks = _csv_byte_chunks(cursor, fetch_size)
+            # Consumir primer chunk (header) para saber si hay tabla vacía
+            first = next(chunks, None)
+            if first is None:
+                print(f"[WARN] No rows for table: {name}")
+                return
 
-            with open(local_file, "w", newline="", encoding="utf-8") as fh:
-                writer = csv.writer(fh)
-                writer.writerow(columns)
+            def all_chunks():
+                yield first
+                yield from chunks
 
-                while True:
-                    rows = cursor.fetchmany(fetch_size)
-                    if not rows:
-                        break
-                    writer.writerows(rows)
-                    wrote = True
-                    batches += 1
-                    if batches % 20 == 0:
-                        gc.collect()
-
-        if not wrote:
-            print(f"[WARN] No rows for table: {name}")
-            if os.path.exists(local_file):
-                os.remove(local_file)
-            return
-
-        print(f"[DB INGEST] {name}: {batches} batch(es) de {fetch_size} filas")
-        upload_path(local_file, s3_key, "DB INGEST")
-    except Exception:
-        if os.path.exists(local_file):
-            os.remove(local_file)
-        raise
+            upload_stream(all_chunks(), s3_key, "DB INGEST")
+            print(f"[DB INGEST] {name}: streaming OK (fetch_size={fetch_size})")
     finally:
         conn.close()
         gc.collect()
