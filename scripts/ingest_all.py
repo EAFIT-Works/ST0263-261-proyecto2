@@ -1,22 +1,26 @@
-import ingest_ec2
-import ingest_db
+import gc
+
 import ingest_api
+import ingest_db
+import ingest_ec2
 
 
 def run_pipeline():
     print("=== FULL INGEST PIPELINE START ===")
 
-    # EC2 files
     ingest_ec2.ingest_ec2_files()
+    gc.collect()
 
-    # MariaDB
     ingest_db.ingest_table("SELECT * FROM people", "people")
-    ingest_db.ingest_table("SELECT * FROM movie_reviews", "movie_reviews")
+    gc.collect()
 
-    # API
+    ingest_db.ingest_table("SELECT * FROM movie_reviews", "movie_reviews")
+    gc.collect()
+
     ingest_api.ingest_api()
 
     print("=== FULL INGEST PIPELINE END ===")
 
 
-run_pipeline()
+if __name__ == "__main__":
+    run_pipeline()

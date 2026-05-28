@@ -1,39 +1,57 @@
+import datetime
+import gc
+import os
+
 import pandas as pd
 from sqlalchemy import create_engine
-import boto3
-import datetime
 
-BUCKET = "movie-analytics-lake"
-
-DB_USER = "admin"
-DB_PASSWORD = "admin123"
-DB_HOST = "54.146.173.72"
-DB_PORT = 3306
-DB_NAME = "movies"
+from config import (
+    CHUNK_SIZE,
+    DB_HOST,
+    DB_NAME,
+    DB_PASSWORD,
+    DB_PORT,
+    DB_USER,
+)
+from s3_util import upload_path
 
 engine = create_engine(
-    f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+    f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}",
+    pool_pre_ping=True,
+    pool_size=1,
+    max_overflow=0,
 )
-
-s3 = boto3.client("s3")
 
 
 def ts():
     return datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
 
 
-def upload_to_s3(df, name):
+def ingest_table(query: str, name: str, chunksize: int = CHUNK_SIZE) -> None:
     timestamp = ts()
-
     local_file = f"/tmp/{name}_{timestamp}.csv"
     s3_key = f"raw/{name}/{name}_{timestamp}.csv"
 
-    df.to_csv(local_file, index=False)
-    s3.upload_file(local_file, BUCKET, s3_key)
+    wrote = False
+    try:
+        for i, chunk in enumerate(pd.read_sql(query, engine, chunksize=chunksize)):
+            chunk.to_csv(
+                local_file,
+                index=False,
+                mode="w" if i == 0 else "a",
+                header=(i == 0),
+            )
+            del chunk
+            wrote = True
+            if i % 10 == 0:
+                gc.collect()
 
-    print(f"[DB INGEST] Uploaded: s3://{BUCKET}/{s3_key}")
+        if not wrote:
+            print(f"[WARN] No rows for table: {name}")
+            return
 
-
-def ingest_table(query, name):
-    df = pd.read_sql(query, engine)
-    upload_to_s3(df, name)
+        upload_path(local_file, s3_key, "DB INGEST")
+    except Exception:
+        if os.path.exists(local_file):
+            os.remove(local_file)
+        raise

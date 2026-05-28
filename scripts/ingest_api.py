@@ -1,50 +1,38 @@
-import requests
-import boto3
-import pandas as pd
+import csv
 import datetime
+import io
 
-BUCKET = "movie-analytics-lake"
+import requests
+
+from s3_util import upload_bytes
+
 API_URL = "https://api.exchangerate-api.com/v4/latest/USD"
-
-s3 = boto3.client("s3")
 
 
 def ts():
     return datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
 
 
-def fetch_api():
-    response = requests.get(API_URL)
-    return response.json()
-
-
-def transform(data):
-    rates = data["rates"]
-
-    df = pd.DataFrame(list(rates.items()), columns=["currency", "rate"])
-    df["base"] = data["base"]
-    df["date"] = data["date"]
-
-    return df
-
-
-def upload_to_s3(df):
-    timestamp = ts()
-
-    local_file = f"/tmp/exchange_{timestamp}.csv"
-    s3_key = f"raw/exchange/exchange_{timestamp}.csv"
-
-    df.to_csv(local_file, index=False)
-    s3.upload_file(local_file, BUCKET, s3_key)
-
-    print(f"[API INGEST] Uploaded: s3://{BUCKET}/{s3_key}")
+def rates_to_csv_bytes(data: dict) -> bytes:
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(["currency", "rate", "base", "date"])
+    base = data["base"]
+    date = data["date"]
+    for currency, rate in data["rates"].items():
+        writer.writerow([currency, rate, base, date])
+    return buf.getvalue().encode("utf-8")
 
 
 def ingest_api():
     print("=== API INGEST START ===")
 
-    data = fetch_api()
-    df = transform(data)
-    upload_to_s3(df)
+    response = requests.get(API_URL, timeout=30)
+    response.raise_for_status()
+    body = rates_to_csv_bytes(response.json())
+
+    timestamp = ts()
+    s3_key = f"raw/exchange/exchange_{timestamp}.csv"
+    upload_bytes(body, s3_key, "API INGEST")
 
     print("=== API INGEST END ===")

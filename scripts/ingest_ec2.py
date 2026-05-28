@@ -1,41 +1,31 @@
-import boto3
-import pandas as pd
-import os
 import datetime
+import os
 
-BUCKET = "movie-analytics-lake"
-LOCAL_PATH = "/home/ubuntu/project/data"
-
-s3 = boto3.client("s3")
+from config import BUCKET, LOCAL_DATA_PATH
+from s3_util import s3
 
 
 def ts():
     return datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
 
 
-def upload(df, name):
+def upload_existing_csv(source_path: str, name: str) -> None:
     timestamp = ts()
-
-    local_file = f"/tmp/{name}_{timestamp}.csv"
     s3_key = f"raw/{name}/{name}_{timestamp}.csv"
-
-    df.to_csv(local_file, index=False)
-    s3.upload_file(local_file, BUCKET, s3_key)
-
+    # Sube el CSV tal cual: sin pandas ni copia en /tmp.
+    s3.upload_file(source_path, BUCKET, s3_key)
     print(f"[EC2 INGEST] Uploaded: s3://{BUCKET}/{s3_key}")
 
 
 def ingest_ec2_files():
     files = {
         "movies": "movies.csv",
-        "tv_shows": "tv_shows.csv"
+        "tv_shows": "tv_shows.csv",
     }
 
     for name, file in files.items():
-        path = os.path.join(LOCAL_PATH, file)
-
+        path = os.path.join(LOCAL_DATA_PATH, file)
         if os.path.exists(path):
-            df = pd.read_csv(path)
-            upload(df, name)
+            upload_existing_csv(path, name)
         else:
             print(f"[WARN] Missing file: {path}")
