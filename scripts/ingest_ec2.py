@@ -12,7 +12,6 @@ def ts():
 def upload_existing_csv(source_path: str, name: str) -> None:
     timestamp = ts()
     s3_key = f"raw/{name}/{name}_{timestamp}.csv"
-    # Sube el CSV tal cual: sin pandas ni copia en /tmp.
     s3.upload_file(source_path, BUCKET, s3_key)
     print(f"[EC2 INGEST] Uploaded: s3://{BUCKET}/{s3_key}")
 

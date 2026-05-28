@@ -10,8 +10,6 @@ s3 = boto3.client("s3")
 
 
 class _StreamReader:
-    """Adapta un iterador de bytes para boto3 upload_fileobj."""
-
     def __init__(self, chunks: Iterator[bytes]):
         self._chunks = chunks
         self._buf = b""
@@ -44,6 +42,5 @@ def upload_bytes(body: bytes, s3_key: str, label: str) -> None:
 
 
 def upload_stream(chunks: Iterator[bytes], s3_key: str, label: str) -> None:
-    """Sube a S3 sin archivo local (evita llenar /tmp)."""
     s3.upload_fileobj(_StreamReader(chunks), BUCKET, s3_key)
     print(f"[{label}] Uploaded: s3://{BUCKET}/{s3_key}")

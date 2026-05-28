@@ -2,10 +2,7 @@ import os
 
 BUCKET = os.environ.get("S3_BUCKET", "movie-analytics-lake2")
 LOCAL_DATA_PATH = "/home/ubuntu/project/data"
-
-# Filas por fetch desde MariaDB (t3.micro: 200–500 suele ir bien)
 DB_FETCH_SIZE = int(os.environ.get("DB_FETCH_SIZE", "500"))
-# Carga CSV -> MariaDB (load_db_data.py)
 CSV_CHUNK_SIZE = int(os.environ.get("CSV_CHUNK_SIZE", "2000"))
 
 DB_USER = os.environ.get("DB_USER", "admin")

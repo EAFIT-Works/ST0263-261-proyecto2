@@ -58,15 +58,8 @@ def _csv_byte_chunks(cursor, fetch_size: int) -> Iterator[bytes]:
         if batches % 20 == 0:
             gc.collect()
 
-    if batches == 0:
-        return
-    # batches > 0 means we had data rows (header always yielded)
-
 
 def ingest_table(query: str, name: str, fetch_size: int = DB_FETCH_SIZE) -> None:
-    """
-    MariaDB -> CSV -> S3 en streaming (sin /tmp, poco RAM).
-    """
     timestamp = ts()
     s3_key = f"raw/{name}/{name}_{timestamp}.csv"
 
@@ -75,7 +68,6 @@ def ingest_table(query: str, name: str, fetch_size: int = DB_FETCH_SIZE) -> None
         with conn.cursor() as cursor:
             cursor.execute(query)
             chunks = _csv_byte_chunks(cursor, fetch_size)
-            # Consumir primer chunk (header) para saber si hay tabla vacía
             first = next(chunks, None)
             if first is None:
                 print(f"[WARN] No rows for table: {name}")

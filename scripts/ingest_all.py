@@ -12,7 +12,6 @@ def run_pipeline():
     ingest_ec2.ingest_ec2_files()
     gc.collect()
 
-    # people suele ser más liviana
     ingest_db.ingest_table(
         "SELECT * FROM people",
         "people",
@@ -20,7 +19,6 @@ def run_pipeline():
     )
     gc.collect()
 
-    # movie_reviews tiene textos largos: batches pequeños
     ingest_db.ingest_table(
         "SELECT * FROM movie_reviews",
         "movie_reviews",
