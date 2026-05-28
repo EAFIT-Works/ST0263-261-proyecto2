@@ -1,4 +1,5 @@
 import gc
+import os
 
 import ingest_api
 import ingest_db
@@ -11,10 +12,20 @@ def run_pipeline():
     ingest_ec2.ingest_ec2_files()
     gc.collect()
 
-    ingest_db.ingest_table("SELECT * FROM people", "people")
+    # people suele ser más liviana
+    ingest_db.ingest_table(
+        "SELECT * FROM people",
+        "people",
+        fetch_size=int(os.environ.get("PEOPLE_FETCH_SIZE", "1000")),
+    )
     gc.collect()
 
-    ingest_db.ingest_table("SELECT * FROM movie_reviews", "movie_reviews")
+    # movie_reviews tiene textos largos: batches pequeños
+    ingest_db.ingest_table(
+        "SELECT * FROM movie_reviews",
+        "movie_reviews",
+        fetch_size=int(os.environ.get("REVIEWS_FETCH_SIZE", "200")),
+    )
     gc.collect()
 
     ingest_api.ingest_api()

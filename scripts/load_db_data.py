@@ -5,7 +5,7 @@ import pandas as pd
 from sqlalchemy import create_engine
 
 from config import (
-    CHUNK_SIZE,
+    CSV_CHUNK_SIZE,
     DB_HOST,
     DB_NAME,
     DB_PASSWORD,
@@ -22,7 +22,7 @@ engine = create_engine(
 )
 
 
-def load_csv(file_name: str, table_name: str, chunksize: int = CHUNK_SIZE) -> None:
+def load_csv(file_name: str, table_name: str, chunksize: int = CSV_CHUNK_SIZE) -> None:
     path = os.path.join(LOCAL_DATA_PATH, file_name)
     print(f"[LOADING] {file_name} -> {table_name}")
 
